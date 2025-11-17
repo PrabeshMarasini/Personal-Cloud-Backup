@@ -1,9 +1,10 @@
 import os
 import io
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, BinaryIO
 import logging
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, BlobBlock
 from azure.core.exceptions import AzureError, ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -41,47 +42,144 @@ class AzureStorageManager:
     
     def upload_blob(self, blob_name: str, data: bytes, 
                    metadata: Dict[str, str] = None, 
-                   overwrite: bool = True) -> Dict[str, Any]:
+                   overwrite: bool = True,
+                   max_retries: int = 3,
+                   chunk_size: int = 4 * 1024 * 1024) -> Dict[str, Any]:
         """
-        Upload data as blob to Azure Storage
+        Upload data as blob to Azure Storage with retry logic and chunked upload for large files
         
         Args:
             blob_name: Name of the blob
             data: Binary data to upload
             metadata: Optional metadata dictionary
             overwrite: Whether to overwrite existing blob
+            max_retries: Maximum number of retry attempts
+            chunk_size: Size of chunks for large file uploads (default 4MB)
             
         Returns:
             Dict with upload information
         """
+        data_size = len(data)
+        logger.info(f"Starting upload of blob: {blob_name} ({data_size} bytes)")
+        
+        for attempt in range(max_retries + 1):
+            try:
+                blob_client = self.container_client.get_blob_client(blob_name)
+                
+                # For large files, use block-based upload to handle network issues better
+                if data_size > 5 * 1024 * 1024:  # 5MB threshold for block upload
+                    logger.info(f"Using block-based upload for large file ({data_size} bytes)")
+                    upload_result = self._upload_in_blocks(blob_client, data, metadata, overwrite)
+                else:
+                    # Standard upload for smaller files
+                    logger.info(f"Using standard upload for file ({data_size} bytes)")
+                    data_stream = io.BytesIO(data)
+                    
+                    start_time = time.time()
+                    upload_result = blob_client.upload_blob(
+                        data_stream,
+                        overwrite=overwrite,
+                        metadata=metadata or {},
+                        timeout=300  # 5 minute timeout for smaller files
+                    )
+                    
+                    elapsed_time = time.time() - start_time
+                    upload_speed = data_size / elapsed_time / 1024 / 1024 if elapsed_time > 0 else 0
+                    logger.info(f"Upload completed in {elapsed_time:.1f}s ({upload_speed:.1f} MB/s)")
+                
+                # Get blob properties for return info
+                properties = blob_client.get_blob_properties()
+                
+                logger.info(f"Successfully uploaded blob: {blob_name} ({data_size} bytes)")
+                
+                return {
+                    'blob_name': blob_name,
+                    'size': data_size,
+                    'etag': upload_result['etag'],
+                    'last_modified': properties.last_modified,
+                    'url': blob_client.url,
+                    'metadata': properties.metadata
+                }
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 2  # Exponential backoff
+                    logger.warning(f"Upload attempt {attempt + 1} failed for {blob_name}: {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"Failed to upload blob {blob_name} after {max_retries + 1} attempts: {e}")
+                    raise
+    
+    def _upload_in_blocks(self, blob_client, data: bytes, metadata: Dict[str, str], overwrite: bool) -> Dict[str, Any]:
+        """Upload large files in blocks to handle network timeouts better"""
         try:
-            blob_client = self.container_client.get_blob_client(blob_name)
+            import uuid
             
-            # Upload with metadata
-            upload_result = blob_client.upload_blob(
-                data, 
-                overwrite=overwrite,
-                metadata=metadata or {}
+            data_size = len(data)
+            block_size = 1024 * 1024  # 1MB blocks for better reliability
+            block_list = []
+            
+            logger.info(f"Uploading {data_size} bytes in {block_size} byte blocks")
+            
+            # Delete existing blob if overwrite is True
+            if overwrite:
+                try:
+                    blob_client.delete_blob()
+                    logger.debug("Deleted existing blob for overwrite")
+                except:
+                    pass  # Blob might not exist
+            
+            start_time = time.time()
+            
+            # Upload each block
+            for i in range(0, data_size, block_size):
+                block_id = str(uuid.uuid4())
+                block_data = data[i:i + block_size]
+                
+                # Retry block upload with shorter timeout
+                block_uploaded = False
+                for block_attempt in range(3):
+                    try:
+                        blob_client.stage_block(
+                            block_id=block_id,
+                            data=block_data,
+                            timeout=60  # 1 minute timeout per block
+                        )
+                        block_list.append(BlobBlock(block_id=block_id))
+                        block_uploaded = True
+                        
+                        progress = ((i + len(block_data)) / data_size) * 100
+                        logger.info(f"Uploaded block {len(block_list)}: {progress:.1f}% complete")
+                        break
+                        
+                    except Exception as e:
+                        if block_attempt < 2:
+                            logger.warning(f"Block upload attempt {block_attempt + 1} failed: {e}. Retrying...")
+                            time.sleep(1)
+                        else:
+                            raise Exception(f"Failed to upload block after 3 attempts: {e}")
+                
+                if not block_uploaded:
+                    raise Exception("Failed to upload block")
+            
+            # Commit all blocks
+            logger.info("Committing blocks...")
+            commit_result = blob_client.commit_block_list(
+                block_list,
+                metadata=metadata or {},
+                timeout=120  # 2 minute timeout for commit
             )
             
-            # Get blob properties for return info
-            properties = blob_client.get_blob_properties()
+            elapsed_time = time.time() - start_time
+            upload_speed = data_size / elapsed_time / 1024 / 1024 if elapsed_time > 0 else 0
+            logger.info(f"Block upload completed in {elapsed_time:.1f}s ({upload_speed:.1f} MB/s)")
             
-            logger.info(f"Successfully uploaded blob: {blob_name} ({len(data)} bytes)")
-            
-            return {
-                'blob_name': blob_name,
-                'size': len(data),
-                'etag': upload_result['etag'],
-                'last_modified': properties.last_modified,
-                'url': blob_client.url,
-                'metadata': properties.metadata
-            }
+            return commit_result
             
         except Exception as e:
-            logger.error(f"Failed to upload blob {blob_name}: {e}")
+            logger.error(f"Block upload failed: {e}")
             raise
-    
+
     def download_blob(self, blob_name: str) -> bytes:
         """Download blob data"""
         try:

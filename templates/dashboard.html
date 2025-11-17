@@ -5,7 +5,7 @@
 
 <div class="row">
     <div class="col-md-3">
-        <div class="card text-white bg-primary">
+        <div class="card text-white bg-primary dashboard-card">
             <div class="card-body">
                 <h5>Total Files</h5>
                 <h3>{{ data.storage_stats.total_files or 0 }}</h3>
@@ -13,7 +13,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card text-white bg-success">
+        <div class="card text-white bg-success dashboard-card">
             <div class="card-body">
                 <h5>Storage Used</h5>
                 <h3>{{ "%.1f"|format((data.storage_stats.total_encrypted_size or 0) / 1024 / 1024) }} MB</h3>
@@ -21,7 +21,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card text-white bg-info">
+        <div class="card text-white bg-info dashboard-card">
             <div class="card-body">
                 <h5>Monitoring</h5>
                 <h3>{{ "Active" if data.monitoring_stats.is_monitoring else "Stopped" }}</h3>
@@ -29,7 +29,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card text-white bg-warning">
+        <div class="card text-white bg-warning dashboard-card">
             <div class="card-body">
                 <h5>Queue Size</h5>
                 <h3>{{ data.backup_status.queue_size or 0 }}</h3>
@@ -64,26 +64,8 @@
     <button class="btn btn-primary" onclick="processBackupQueue()">Process Backup Queue</button>
     <button class="btn btn-secondary" onclick="runCleanup()">Run Cleanup</button>
 </div>
+{% endblock %}
 
-<script>
-function processBackupQueue() {
-    fetch('/api/backup/process', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            alert('Backup processing completed: ' + (data.successful_backups?.length || 0) + ' files backed up');
-            location.reload();
-        })
-        .catch(error => alert('Error: ' + error));
-}
-
-function runCleanup() {
-    fetch('/api/cleanup', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            alert('Cleanup completed: ' + (data.database_records_cleaned || 0) + ' records cleaned');
-            location.reload();
-        })
-        .catch(error => alert('Error: ' + error));
-}
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

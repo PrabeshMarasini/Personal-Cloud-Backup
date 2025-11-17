@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Manual Backup</h1>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Backup Files Manually</h5>
+    </div>
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="file_path" class="form-label">File Path to Backup:</label>
+                <input type="text" class="form-control" id="file_path" name="file_path" 
+                       placeholder="Enter full path to file or directory" required>
+                <div class="form-text">Enter the full path to the file or directory you want to backup.</div>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="recursive" name="recursive" checked>
+                <label class="form-check-label" for="recursive">
+                    Backup directory recursively (if path is a directory)
+                </label>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="force" name="force">
+                <label class="form-check-label" for="force">
+                    Force backup even if file hasn't changed
+                </label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Start Backup</button>
+            <a href="/" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+
+<div class="mt-4">
+    <h5>Recent Manual Backups</h5>
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        Manual backup history will be displayed here after you perform some backups.
+    </div>
+</div>
+{% endblock %}

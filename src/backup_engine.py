@@ -129,6 +129,12 @@ class BackupEngine:
             
             original_size = len(original_data)
             
+            # Warn about large files
+            large_file_threshold = getattr(self.config, 'large_file_threshold_mb', 10) * 1024 * 1024
+            if original_size > large_file_threshold:
+                logger.info(f"Processing large file: {file_path} ({original_size / 1024 / 1024:.1f} MB)")
+                logger.info("This may take several minutes depending on your internet connection...")
+            
             # Generate checksum
             checksum = self.encryption_manager.generate_data_hash(original_data)
             
@@ -157,11 +163,17 @@ class BackupEngine:
                 'compression_level': str(self.config.compression_level)
             }
             
-            # Upload to Azure
+            # Upload to Azure with retry and chunking configuration
+            chunk_size = getattr(self.config, 'chunk_size_mb', 4) * 1024 * 1024
+            max_retries = getattr(self.config, 'retry_attempts', 3)
+            
+            logger.info(f"Uploading {len(encrypted_data)} bytes to Azure Storage...")
             upload_result = self.azure_manager.upload_blob(
                 blob_name=blob_name,
                 data=encrypted_data,
-                metadata=metadata
+                metadata=metadata,
+                max_retries=max_retries,
+                chunk_size=chunk_size
             )
             
             # Prepare metadata with JSON-serializable values

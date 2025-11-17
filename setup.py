@@ -96,189 +96,49 @@ WantedBy=multi-user.target
     print("  sudo systemctl start personal-backup")
 
 def create_basic_templates():
-    """Create basic HTML templates"""
-    templates = {
-        'templates/base.html': '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Backup System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
-            <a class="navbar-brand" href="/">Backup System</a>
-            <div class="navbar-nav">
-                <a class="nav-link" href="/">Dashboard</a>
-                <a class="nav-link" href="/files">Files</a>
-                <a class="nav-link" href="/settings">Settings</a>
-            </div>
-        </div>
-    </nav>
+    """Create basic HTML templates and static assets"""
+    import shutil
     
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        {% block content %}{% endblock %}
-    </div>
+    # Check if templates already exist (they should after extraction)
+    template_files = [
+        'templates/base.html',
+        'templates/dashboard.html', 
+        'templates/files.html',
+        'templates/error.html',
+        'templates/file_versions.html',
+        'templates/restore.html',
+        'templates/manual_backup.html',
+        'templates/settings.html'
+    ]
     
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>''',
-        
-        'templates/dashboard.html': '''{% extends "base.html" %}
-
-{% block content %}
-<h1>Backup Dashboard</h1>
-
-<div class="row">
-    <div class="col-md-3">
-        <div class="card text-white bg-primary">
-            <div class="card-body">
-                <h5>Total Files</h5>
-                <h3>{{ data.storage_stats.total_files or 0 }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-success">
-            <div class="card-body">
-                <h5>Storage Used</h5>
-                <h3>{{ "%.1f"|format((data.storage_stats.total_encrypted_size or 0) / 1024 / 1024) }} MB</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-info">
-            <div class="card-body">
-                <h5>Monitoring</h5>
-                <h3>{{ "Active" if data.monitoring_stats.is_monitoring else "Stopped" }}</h3>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-warning">
-            <div class="card-body">
-                <h5>Queue Size</h5>
-                <h3>{{ data.backup_status.queue_size or 0 }}</h3>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="mt-4">
-    <h3>Recent Backups</h3>
-    <div class="table-responsive">
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>File Path</th>
-                    <th>Last Backup</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for backup in data.recent_backups %}
-                <tr>
-                    <td>{{ backup.file_path }}</td>
-                    <td>{{ backup.latest_backup }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="mt-4">
-    <button class="btn btn-primary" onclick="processBackupQueue()">Process Backup Queue</button>
-    <button class="btn btn-secondary" onclick="runCleanup()">Run Cleanup</button>
-</div>
-
-<script>
-function processBackupQueue() {
-    fetch('/api/backup/process', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            alert('Backup processing completed: ' + (data.successful_backups?.length || 0) + ' files backed up');
-            location.reload();
-        })
-        .catch(error => alert('Error: ' + error));
-}
-
-function runCleanup() {
-    fetch('/api/cleanup', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            alert('Cleanup completed: ' + (data.database_records_cleaned || 0) + ' records cleaned');
-            location.reload();
-        })
-        .catch(error => alert('Error: ' + error));
-}
-</script>
-{% endblock %}''',
-        
-        'templates/files.html': '''{% extends "base.html" %}
-
-{% block content %}
-<h1>Backed Up Files</h1>
-
-<div class="mb-3">
-    <form method="GET" class="d-flex">
-        <input type="text" class="form-control me-2" name="search" placeholder="Search files..." value="{{ search_query or '' }}">
-        <button class="btn btn-outline-secondary" type="submit">Search</button>
-    </form>
-</div>
-
-<div class="table-responsive">
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>File Path</th>
-                <th>Last Backup</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for file in files %}
-            <tr>
-                <td>{{ file.file_path }}</td>
-                <td>{{ file.latest_backup }}</td>
-                <td>
-                    <a href="/file/{{ file.file_path | urlencode }}/versions" class="btn btn-sm btn-primary">View Versions</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endblock %}''',
-        
-        'templates/error.html': '''{% extends "base.html" %}
-
-{% block content %}
-<div class="text-center">
-    <h1 class="display-4 text-danger">Error</h1>
-    <p class="lead">{{ error }}</p>
-    <a href="/" class="btn btn-primary">Go to Dashboard</a>
-</div>
-{% endblock %}'''
-    }
+    static_files = [
+        'static/css/main.css',
+        'static/js/dashboard.js',
+        'static/js/settings.js'
+    ]
     
-    for file_path, content in templates.items():
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w') as f:
-            f.write(content)
-        print(f"Created template: {file_path}")
+    # Only create templates if they don't exist
+    missing_templates = [f for f in template_files if not os.path.exists(f)]
+    missing_static = [f for f in static_files if not os.path.exists(f)]
+    
+    if missing_templates:
+        print(f"Warning: Missing template files: {missing_templates}")
+        print("Templates should be extracted from setup.py to separate files")
+    else:
+        print("All template files found")
+        
+    if missing_static:
+        print(f"Warning: Missing static files: {missing_static}")
+        print("Static assets should be extracted from templates to separate files")
+    else:
+        print("All static files found")
+    
+    # Ensure directories exist
+    for template_file in template_files:
+        os.makedirs(os.path.dirname(template_file), exist_ok=True)
+    
+    for static_file in static_files:
+        os.makedirs(os.path.dirname(static_file), exist_ok=True)
 
 def main():
     """Main setup function"""

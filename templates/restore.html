@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Restore File</h1>
+
+<div class="mb-3">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/files">Files</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Restore</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Restore File</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>File Information</h6>
+                <p><strong>Path:</strong> {{ backup.file_path }}</p>
+                <p><strong>Backup Date:</strong> {{ backup.backup_timestamp }}</p>
+                <p><strong>Size:</strong> {{ "%.1f"|format((backup.encrypted_size or 0) / 1024) }} KB</p>
+            </div>
+        </div>
+        
+        <form method="POST" class="mt-3">
+            <div class="mb-3">
+                <label for="restore_path" class="form-label">Restore to Path:</label>
+                <input type="text" class="form-control" id="restore_path" name="restore_path" 
+                       value="{{ backup.file_path }}" required>
+                <div class="form-text">Specify where to restore the file. Leave as original path to overwrite.</div>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="overwrite" name="overwrite">
+                <label class="form-check-label" for="overwrite">
+                    Overwrite existing file if it exists
+                </label>
+            </div>
+            
+            <button type="submit" class="btn btn-success">Restore File</button>
+            <a href="/files" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

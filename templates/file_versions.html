@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>File Versions</h1>
+
+<div class="mb-3">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="/files">Files</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ file_path }}</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">{{ file_path }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Backup Date</th>
+                        <th>Size</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for version in versions %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ version.backup_timestamp }}</td>
+                        <td>{{ "%.1f"|format((version.encrypted_size or 0) / 1024) }} KB</td>
+                        <td>
+                            <a href="/restore/{{ version.id }}" class="btn btn-sm btn-success">Restore</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

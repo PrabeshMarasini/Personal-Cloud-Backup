@@ -10,7 +10,7 @@ import logging
 from .database import DatabaseManager
 from .azure_client import AzureStorageManager
 from .backup_engine import BackupEngine
-from .file_monitor import FileMonitor
+from .file_monitoring import FileMonitor
 
 logger = logging.getLogger(__name__)
 

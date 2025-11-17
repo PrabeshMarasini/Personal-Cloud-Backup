@@ -1,0 +1,46 @@
+backup:
+  watched_directories:
+    - ~/Documents
+    - ~/Pictures
+    - ~/Desktop
+  exclude_patterns:
+    - "*.tmp"
+    - "*.log"
+    - "*.cache"
+    - "__pycache__/*"
+    - "*.pyc"
+    - ".git/*"
+    - "node_modules/*"
+    - "*.DS_Store"
+    - "Thumbs.db"
+    - "*.swp"
+    - "*.swo"
+    - "~$*"
+  compression_level: 6
+  max_file_size_mb: 100
+  batch_size: 10
+  retry_attempts: 3
+  backup_interval_minutes: 60
+
+versioning:
+  max_versions_per_file: 5
+  retention_days: 90
+  cleanup_interval_hours: 24
+
+database:
+  path: data/backup.db
+  backup_db_interval_hours: 6
+
+logging:
+  level: INFO
+  file: logs/backup.log
+  max_size_mb: 10
+  backup_count: 5
+
+web:
+  host: 127.0.0.1
+  port: 5000
+  debug: false
+
+encryption:
+  key_derivation_iterations: 100000

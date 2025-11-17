@@ -7,6 +7,17 @@ import json
 
 logger = logging.getLogger(__name__)
 
+def serialize_for_json(obj: Any) -> Any:
+    """Convert objects to JSON-serializable format"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: serialize_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [serialize_for_json(item) for item in obj]
+    else:
+        return obj
+
 class DatabaseManager:
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -85,7 +96,7 @@ class DatabaseManager:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (file_path, original_size, compressed_size, encrypted_size, blob_name,
                       datetime.now().isoformat(), checksum, version, device_id, salt,
-                      json.dumps(metadata) if metadata else None))
+                      json.dumps(serialize_for_json(metadata)) if metadata else None))
                 
                 backup_id = cursor.lastrowid
                 
@@ -246,7 +257,7 @@ class DatabaseManager:
                     COUNT(*) as total_files,
                     SUM(original_size) as total_original_size,
                     SUM(encrypted_size) as total_encrypted_size,
-                    AVG(compressed_size * 1.0 / original_size) as avg_compression_ratio
+                    AVG(CASE WHEN original_size > 0 THEN compressed_size * 1.0 / original_size ELSE 0 END) as avg_compression_ratio
                 FROM backups 
                 WHERE device_id = ? AND is_deleted = FALSE
             ''', (device_id,))
@@ -287,6 +298,45 @@ class DatabaseManager:
             ''', (f'%{query}%', device_id, limit))
             
             return [dict(row) for row in cursor.fetchall()]
+    
+    def get_storage_stats(self, device_id: str) -> Dict[str, Any]:
+        """Get storage statistics for a device"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                # Get overall statistics
+                cursor = conn.execute('''
+                    SELECT 
+                        COUNT(*) as total_files,
+                        COUNT(DISTINCT file_path) as unique_files,
+                        SUM(original_size) as total_original_size,
+                        SUM(compressed_size) as total_compressed_size,
+                        SUM(encrypted_size) as total_encrypted_size,
+                        AVG(compressed_size * 1.0 / original_size) as avg_compression_ratio
+                    FROM backups 
+                    WHERE device_id = ? AND is_deleted = FALSE
+                ''', (device_id,))
+                
+                stats = dict(cursor.fetchone())
+                
+                # Handle null values
+                for key, value in stats.items():
+                    if value is None:
+                        stats[key] = 0
+                
+                return stats
+                
+        except Exception as e:
+            logger.error(f"Failed to get storage stats: {e}")
+            return {
+                'total_files': 0,
+                'unique_files': 0,
+                'total_original_size': 0,
+                'total_compressed_size': 0,
+                'total_encrypted_size': 0,
+                'avg_compression_ratio': 0
+            }
 
 def create_database_manager(db_path: str = None) -> DatabaseManager:
     """Factory function to create database manager"""

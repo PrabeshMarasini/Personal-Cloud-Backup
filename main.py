@@ -22,7 +22,7 @@ from src.database import create_database_manager
 from src.azure_client import create_azure_manager
 from src.encryption import create_encryption_manager
 from src.backup_engine import BackupEngine
-from src.file_monitor import create_file_monitor
+from src.file_monitoring import create_file_monitor
 from src.web_dashboard import create_web_app, run_web_app
 
 # Setup logging
@@ -162,8 +162,11 @@ class BackupSystem:
             # Setup scheduled tasks
             self._setup_scheduler()
             
+            # Set running flag BEFORE starting threads
+            self.is_running = True
+            
             # Start scheduler in background thread
-            self.scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=True)
+            self.scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=False)
             self.scheduler_thread.start()
             
             # Start web dashboard in background thread
@@ -177,8 +180,6 @@ class BackupSystem:
                 daemon=True
             )
             self.web_thread.start()
-            
-            self.is_running = True
             logger.info(f"Backup system started successfully!")
             logger.info(f"Web dashboard available at http://{config.web_host}:{config.web_port}")
             

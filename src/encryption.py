@@ -4,7 +4,7 @@ import hashlib
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from typing import bytes, str
+from typing import Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class EncryptionManager:
         key = base64.urlsafe_b64encode(kdf.derive(self.password))
         return Fernet(key), salt
     
-    def encrypt_data(self, data: bytes) -> tuple[bytes, bytes]:
+    def encrypt_data(self, data: bytes) -> Tuple[bytes, bytes]:
         """
         Encrypt data and return encrypted data with salt
         Returns: (encrypted_data, salt)
@@ -53,7 +53,7 @@ class EncryptionManager:
             logger.error(f"Decryption failed: {e}")
             raise
     
-    def encrypt_file(self, file_path: str) -> tuple[bytes, bytes]:
+    def encrypt_file(self, file_path: str) -> Tuple[bytes, bytes]:
         """
         Encrypt file contents
         Returns: (encrypted_data, salt)

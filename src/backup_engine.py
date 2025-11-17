@@ -96,8 +96,12 @@ class BackupEngine:
         """Compress data using gzip"""
         try:
             compressed_data = gzip.compress(data, compresslevel=self.config.compression_level)
-            compression_ratio = len(compressed_data) / len(data)
-            logger.debug(f"Compressed {len(data)} bytes to {len(compressed_data)} bytes (ratio: {compression_ratio:.2f})")
+            # Handle division by zero for empty files
+            if len(data) > 0:
+                compression_ratio = len(compressed_data) / len(data)
+                logger.debug(f"Compressed {len(data)} bytes to {len(compressed_data)} bytes (ratio: {compression_ratio:.2f})")
+            else:
+                logger.debug(f"Compressed empty file: 0 bytes to {len(compressed_data)} bytes")
             return compressed_data
         except Exception as e:
             logger.error(f"Compression failed: {e}")
@@ -160,6 +164,15 @@ class BackupEngine:
                 metadata=metadata
             )
             
+            # Prepare metadata with JSON-serializable values
+            # Convert datetime objects to ISO strings
+            upload_info_serializable = {}
+            for key, value in upload_result.items():
+                if isinstance(value, datetime):
+                    upload_info_serializable[key] = value.isoformat()
+                else:
+                    upload_info_serializable[key] = value
+            
             # Save to database
             backup_id = self.db_manager.add_backup_record(
                 file_path=file_path,
@@ -171,7 +184,7 @@ class BackupEngine:
                 device_id=self.device_id,
                 salt=salt.hex(),  # Store salt as hex string
                 metadata={
-                    'upload_info': upload_result,
+                    'upload_info': upload_info_serializable,
                     'file_mtime': os.path.getmtime(file_path)
                 }
             )
@@ -185,7 +198,7 @@ class BackupEngine:
                 'encrypted_size': encrypted_size,
                 'blob_name': blob_name,
                 'checksum': checksum,
-                'compression_ratio': compressed_size / original_size,
+                'compression_ratio': compressed_size / original_size if original_size > 0 else 0,
                 'backup_time': datetime.now()
             }
             
@@ -421,3 +434,4 @@ class BackupEngine:
             'device_id': self.device_id,
             'storage_stats': self.db_manager.get_storage_stats(self.device_id)
         }
+    

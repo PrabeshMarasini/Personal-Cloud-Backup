@@ -10,7 +10,7 @@ backup:
   - '*.pyc'
   - .git/*
   - node_modules/*
-  max_file_size_mb: 100
+  max_file_size_mb: 1500
   retry_attempts: 3
   upload_timeout_seconds: 600
   chunk_size_mb: 4

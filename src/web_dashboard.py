@@ -235,39 +235,7 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
             logger.error(f"Process backup queue error: {e}")
             return jsonify({'error': str(e)}), 500
     
-    @app.route('/settings', methods=['GET', 'POST'])
-    def settings():
-        """Settings page"""
-        if request.method == 'GET':
-            # Load current configuration
-            from config.config import config
-            
-            settings_data = {
-                'watched_directories': config.watched_directories,
-                'exclude_patterns': config.exclude_patterns,
-                'compression_level': config.compression_level,
-                'max_file_size_mb': config.max_file_size_mb,
-                'max_versions_per_file': config.max_versions_per_file,
-                'retention_days': config.retention_days,
-                'backup_interval_minutes': config.backup_interval_minutes
-            }
-            
-            return render_template('settings.html', settings=settings_data)
-        
-        try:
-            # Handle settings update
-            data = request.get_json() or {}
-            
-            # Update configuration (this is simplified - in production you'd want
-            # to validate and properly save configuration changes)
-            flash('Settings updated successfully', 'success')
-            
-            return jsonify({'message': 'Settings updated'})
-            
-        except Exception as e:
-            logger.error(f"Settings update error: {e}")
-            return jsonify({'error': str(e)}), 500
-    
+
     @app.route('/api/cleanup', methods=['POST'])
     def api_cleanup():
         """Run cleanup via API"""

@@ -107,14 +107,12 @@ def create_basic_templates():
         'templates/error.html',
         'templates/file_versions.html',
         'templates/restore.html',
-        'templates/manual_backup.html',
-        'templates/settings.html'
+        'templates/manual_backup.html'
     ]
     
     static_files = [
         'static/css/main.css',
-        'static/js/dashboard.js',
-        'static/js/settings.js'
+        'static/js/dashboard.js'
     ]
     
     # Only create templates if they don't exist

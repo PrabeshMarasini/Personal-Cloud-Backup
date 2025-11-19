@@ -324,28 +324,7 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
             logger.error(f"Manual backup error: {e}")
             return jsonify({'error': str(e)}), 500
     
-    @app.route('/api/backup/process', methods=['POST'])
-    def api_process_backup_queue():
-        """Process backup queue via API"""
-        try:
-            results = backup_engine.process_backup_queue()
-            return jsonify(results)
-            
-        except Exception as e:
-            logger.error(f"Process backup queue error: {e}")
-            return jsonify({'error': str(e)}), 500
-    
 
-    @app.route('/api/cleanup', methods=['POST'])
-    def api_cleanup():
-        """Run cleanup via API"""
-        try:
-            results = backup_engine.cleanup_old_backups()
-            return jsonify(results)
-            
-        except Exception as e:
-            logger.error(f"Cleanup error: {e}")
-            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/monitoring/start', methods=['POST'])
     def api_start_monitoring():

@@ -1,11 +1,8 @@
 // Files page functionality (NiziPos Style)
 
-let selectedFiles = [];
-
 // Filter files based on search and status
 function filterFiles() {
     const searchTerm = document.getElementById('file-search').value.toLowerCase();
-    const statusFilter = document.getElementById('status-filter').value;
     const rows = document.querySelectorAll('.file-row');
     let visibleCount = 0;
     
@@ -13,9 +10,8 @@ function filterFiles() {
         const filename = row.getAttribute('data-filename');
         const path = row.getAttribute('data-path');
         const matchesSearch = filename.includes(searchTerm) || path.includes(searchTerm);
-        const matchesStatus = !statusFilter || row.querySelector('.bg-green-100');
         
-        if (matchesSearch && matchesStatus) {
+        if (matchesSearch) {
             row.style.display = '';
             visibleCount++;
         } else {
@@ -40,56 +36,6 @@ function filterFiles() {
     if (countBadge) {
         countBadge.textContent = `${visibleCount} Files Found`;
     }
-}
-
-// Toggle select all checkboxes
-function toggleSelectAll() {
-    const selectAll = document.getElementById('select-all');
-    const checkboxes = document.querySelectorAll('.file-select');
-    
-    checkboxes.forEach(checkbox => {
-        if (checkbox.closest('.file-row').style.display !== 'none') {
-            checkbox.checked = selectAll.checked;
-        }
-    });
-    
-    updateBulkActions();
-}
-
-// Update bulk actions based on selection
-function updateBulkActions() {
-    const checkboxes = document.querySelectorAll('.file-select:checked');
-    selectedFiles = Array.from(checkboxes).map(cb => cb.value);
-    
-    const bulkActions = document.getElementById('bulk-actions');
-    const selectedCount = document.getElementById('selected-count');
-    
-    if (selectedCount) {
-        selectedCount.textContent = selectedFiles.length;
-    }
-    
-    if (selectedFiles.length > 0) {
-        if (bulkActions) bulkActions.style.display = 'block';
-    } else {
-        if (bulkActions) bulkActions.style.display = 'none';
-    }
-}
-
-// Toggle bulk actions panel
-function toggleBulkActions() {
-    const bulkActions = document.getElementById('bulk-actions');
-    if (bulkActions) {
-        bulkActions.style.display = bulkActions.style.display === 'none' ? 'block' : 'none';
-    }
-}
-
-// Clear all selections
-function clearSelection() {
-    const checkboxes = document.querySelectorAll('.file-select');
-    checkboxes.forEach(cb => cb.checked = false);
-    const selectAll = document.getElementById('select-all');
-    if (selectAll) selectAll.checked = false;
-    updateBulkActions();
 }
 
 // Sort files table
@@ -119,21 +65,6 @@ function sortFilesTable(columnIndex) {
     table.setAttribute('data-sort-direction', isAscending ? 'asc' : 'desc');
     
     showNotification('Table sorted', 'info');
-}
-
-
-
-// Bulk delete files
-function bulkDelete() {
-    if (selectedFiles.length === 0) {
-        showNotification('Please select files to delete', 'error');
-        return;
-    }
-    
-    if (confirm(`Are you sure you want to delete ${selectedFiles.length} backup records? This cannot be undone.`)) {
-        showNotification(`Bulk delete of ${selectedFiles.length} files started`, 'info');
-        // TODO: Implement bulk delete functionality
-    }
 }
 
 // Show notification (same as dashboard)
@@ -173,6 +104,4 @@ document.addEventListener('DOMContentLoaded', function() {
             filterFiles();
         }
     }
-    
-
 });

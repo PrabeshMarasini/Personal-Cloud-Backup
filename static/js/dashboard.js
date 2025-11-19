@@ -28,70 +28,9 @@ function showNotification(message, type = 'info') {
     }, 4000);
 }
 
-// Set button loading state
-function setButtonLoading(buttonId, loading) {
-    const button = document.getElementById(buttonId);
-    if (!button) return;
-    
-    if (loading) {
-        button.disabled = true;
-        button.classList.remove('bg-blue-500', 'hover:bg-blue-700', 'bg-yellow-500', 'hover:bg-yellow-700');
-        button.classList.add('bg-gray-500', 'cursor-not-allowed');
-        
-        // Add spinner
-        const spinner = '<span class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>';
-        button.innerHTML = spinner + 'Processing...';
-    } else {
-        button.disabled = false;
-        button.classList.remove('bg-gray-500', 'cursor-not-allowed');
-    }
-}
 
-// Process backup queue with enhanced UI
-function processBackupQueue() {
-    setButtonLoading('process-queue-btn', true);
-    
-    axios.post('/api/backup/process')
-        .then(response => {
-            const count = response.data.successful_backups?.length || 0;
-            showNotification(`Backup processing completed: ${count} files backed up`, 'success');
-            refreshDashboardStats();
-        })
-        .catch(error => {
-            showNotification('Error processing backup queue: ' + error.message, 'error');
-        })
-        .finally(() => {
-            setButtonLoading('process-queue-btn', false);
-            const button = document.getElementById('process-queue-btn');
-            if (button) {
-                button.classList.add('bg-blue-500', 'hover:bg-blue-700');
-                button.innerHTML = 'Process Backup Queue';
-            }
-        });
-}
 
-// Run cleanup with enhanced UI
-function runCleanup() {
-    setButtonLoading('cleanup-btn', true);
-    
-    axios.post('/api/cleanup')
-        .then(response => {
-            const count = response.data.database_records_cleaned || 0;
-            showNotification(`Cleanup completed: ${count} records cleaned`, 'success');
-            refreshDashboardStats();
-        })
-        .catch(error => {
-            showNotification('Error running cleanup: ' + error.message, 'error');
-        })
-        .finally(() => {
-            setButtonLoading('cleanup-btn', false);
-            const button = document.getElementById('cleanup-btn');
-            if (button) {
-                button.classList.add('bg-yellow-500', 'hover:bg-yellow-700');
-                button.innerHTML = 'Run Cleanup';
-            }
-        });
-}
+
 
 // Refresh dashboard statistics
 function refreshDashboardStats() {

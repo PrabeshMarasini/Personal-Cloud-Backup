@@ -9,37 +9,6 @@
                    value="{{ search_query or '' }}" onkeyup="filterFiles()"
                    class="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
         </div>
-        <div class="flex gap-2">
-            <select id="status-filter" onchange="filterFiles()" 
-                    class="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
-                <option value="">All Status</option>
-                <option value="backed-up">Backed Up</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
-            </select>
-            <button onclick="toggleBulkActions()" 
-                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                Bulk Actions
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Bulk Actions Panel -->
-<div id="bulk-actions" class="bg-yellow-100 border border-yellow-300 rounded p-4 mb-6" style="display: none;">
-    <div class="flex flex-col md:flex-row gap-4 items-center">
-        <span class="font-semibold">Selected: <span id="selected-count">0</span> files</span>
-        <div class="flex gap-2">
-
-            <button onclick="bulkDelete()" 
-                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-                Delete Selected
-            </button>
-            <button onclick="clearSelection()" 
-                    class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-                Clear Selection
-            </button>
-        </div>
     </div>
 </div>
 
@@ -59,17 +28,13 @@
         <table class="w-full" id="files-table">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="py-3 px-4 text-left">
-                        <input type="checkbox" id="select-all" onchange="toggleSelectAll()" 
-                               class="transform scale-125">
-                    </th>
-                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(1)">
+                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(0)">
                         File Name
                     </th>
-                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(2)">
+                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(1)">
                         Path
                     </th>
-                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(3)">
+                    <th class="py-3 px-4 text-left font-semibold text-gray-600 cursor-pointer" onclick="sortFilesTable(2)">
                         Last Backup
                     </th>
                     <th class="py-3 px-4 text-center font-semibold text-gray-600">Actions</th>
@@ -80,10 +45,6 @@
                 <tr class="file-row border-b hover:bg-gray-50" 
                     data-filename="{{ file.file_path.split('/')[-1].lower() }}" 
                     data-path="{{ file.file_path.lower() }}">
-                    <td class="py-3 px-4">
-                        <input type="checkbox" class="file-select transform scale-125" 
-                               value="{{ file.file_path }}" onchange="updateBulkActions()">
-                    </td>
                     <td class="py-3 px-4">
                         <div class="font-medium text-left">{{ file.file_path.split('\\')[-1] or file.file_path.split('/')[-1] or file.file_path }}</div>
                     </td>
@@ -97,7 +58,6 @@
                                class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-sm">
                                 Versions
                             </a>
-
                         </div>
                     </td>
                 </tr>

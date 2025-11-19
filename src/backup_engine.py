@@ -227,19 +227,23 @@ class BackupEngine:
             )
             return None
     
-    def restore_file(self, backup_id: int, restore_path: str) -> bool:
+    def restore_file(self, backup_id: int, restore_path: str, progress_callback=None) -> bool:
         """
         Restore a file from backup
         
         Args:
             backup_id: Database ID of the backup record
             restore_path: Path where to restore the file
+            progress_callback: Optional callback function for progress updates
             
         Returns:
             True if successful, False otherwise
         """
         try:
             logger.info(f"Starting restore of backup ID {backup_id} to {restore_path}")
+            
+            if progress_callback:
+                progress_callback(5, "Validating restore path...", "Checking destination directory")
             
             # Validate restore path
             if not restore_path or not restore_path.strip():
@@ -249,6 +253,9 @@ class BackupEngine:
             restore_path = restore_path.strip()
             logger.info(f"Normalized restore path: '{restore_path}' (length: {len(restore_path)})")
             
+            if progress_callback:
+                progress_callback(10, "Loading backup record...", "Retrieving backup information")
+            
             # Get backup record
             backup_record = self.db_manager.get_backup_by_id(backup_id)
             if not backup_record:
@@ -257,16 +264,28 @@ class BackupEngine:
             
             logger.info(f"Found backup record for file: {backup_record['file_path']}")
             
+            if progress_callback:
+                progress_callback(20, "Downloading from Azure...", "Retrieving encrypted backup data")
+            
             # Download from Azure
             logger.info(f"Downloading blob: {backup_record['blob_name']}")
             encrypted_data = self.azure_manager.download_blob(backup_record['blob_name'])
+            
+            if progress_callback:
+                progress_callback(50, "Decrypting data...", "Processing encrypted content")
             
             # Decrypt data
             salt = bytes.fromhex(backup_record['salt'])
             compressed_data = self.encryption_manager.decrypt_data(encrypted_data, salt)
             
+            if progress_callback:
+                progress_callback(70, "Decompressing file...", "Extracting original file data")
+            
             # Decompress data
             original_data = gzip.decompress(compressed_data)
+            
+            if progress_callback:
+                progress_callback(80, "Verifying integrity...", "Checking file integrity")
             
             # Verify checksum
             actual_checksum = self.encryption_manager.generate_data_hash(original_data)
@@ -274,16 +293,25 @@ class BackupEngine:
                 logger.error(f"Checksum mismatch during restore: {backup_id}")
                 return False
             
+            if progress_callback:
+                progress_callback(85, "Preparing destination...", "Creating directory structure")
+            
             # Ensure parent directory exists
             restore_dir = os.path.dirname(restore_path)
             if restore_dir:
                 logger.info(f"Creating directory if needed: {restore_dir}")
                 os.makedirs(restore_dir, exist_ok=True)
             
+            if progress_callback:
+                progress_callback(90, "Writing to disk...", "Saving restored file")
+            
             # Write to restore path
             logger.info(f"Writing {len(original_data)} bytes to: {restore_path}")
             with open(restore_path, 'wb') as f:
                 f.write(original_data)
+            
+            if progress_callback:
+                progress_callback(95, "Verifying restore...", "Confirming file was written correctly")
             
             # Verify the file was written correctly
             if os.path.exists(restore_path):
@@ -292,6 +320,9 @@ class BackupEngine:
             else:
                 logger.error(f"File was not created at: {restore_path}")
                 return False
+            
+            if progress_callback:
+                progress_callback(100, "Restore complete!", "File successfully restored")
             
             logger.info(f"Successfully restored backup {backup_id} to {restore_path}")
             return True

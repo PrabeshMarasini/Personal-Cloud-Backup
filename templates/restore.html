@@ -52,7 +52,7 @@
 <div class="bg-white shadow-md rounded p-6 mb-6">
     <h3 class="text-lg font-semibold text-gray-800 mb-4">Restore Options</h3>
 
-    <form method="POST" class="space-y-4">
+    <form id="restore-form" method="POST" class="space-y-4">
         <div>
             <label for="restore_path" class="block text-sm font-medium text-gray-600 mb-2">Restore to Path</label>
             <input type="text" id="restore_path" name="restore_path" value="{{ backup.file_path|e }}" required
@@ -78,7 +78,7 @@
         </div>
 
         <div class="flex gap-4 pt-4">
-            <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
+            <button type="submit" id="restore-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
                 Restore File
             </button>
             <a href="/files" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded">
@@ -87,10 +87,41 @@
         </div>
     </form>
 </div>
+
+<!-- Progress Bar (Hidden by default) -->
+<div id="progress-container" class="bg-white shadow-md rounded p-6 mb-6" style="display: none;">
+    <h3 class="text-lg font-semibold text-gray-800 mb-4">Restoring File...</h3>
+    
+    <div class="space-y-4">
+        <!-- Progress Bar -->
+        <div class="w-full bg-gray-200 rounded-full h-4">
+            <div id="progress-bar" class="bg-blue-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        
+        <!-- Progress Text -->
+        <div class="flex justify-between text-sm text-gray-600">
+            <span id="progress-text">Initializing restore...</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        
+        <!-- Current Step -->
+        <div class="text-sm text-gray-500">
+            <span id="current-step">Preparing restore operation...</span>
+        </div>
+        
+        <!-- File Size Info -->
+        <div class="text-xs text-gray-400">
+            <span>File Size: {{ "%.1f"|format((backup.encrypted_size or 0) / 1024) }} KB</span>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    let restoreInProgress = false;
+    let progressInterval;
+
     // Auto-expand input field for long paths
     document.addEventListener('DOMContentLoaded', function () {
         const pathInput = document.getElementById('restore_path');
@@ -110,6 +141,169 @@
                 this.select();
             });
         }
+
+        // Handle form submission with progress bar
+        const restoreForm = document.getElementById('restore-form');
+        if (restoreForm) {
+            restoreForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                startRestore();
+            });
+        }
     });
+
+    function startRestore() {
+        if (restoreInProgress) return;
+        
+        restoreInProgress = true;
+        
+        // Show progress bar and hide form
+        document.getElementById('progress-container').style.display = 'block';
+        document.querySelector('.bg-white.shadow-md.rounded.p-6.mb-6:has(#restore-form)').style.display = 'none';
+        
+        // Disable navigation
+        const cancelLink = document.querySelector('a[href="/files"]');
+        if (cancelLink) {
+            cancelLink.style.pointerEvents = 'none';
+            cancelLink.style.opacity = '0.5';
+        }
+        
+        // Submit form data via AJAX with progress tracking
+        const formData = new FormData(document.getElementById('restore-form'));
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.restore_id) {
+                console.log('Received restore ID:', data.restore_id);
+                // Start polling for progress immediately
+                pollProgress(data.restore_id);
+            } else if (data.error) {
+                showError(data.error);
+            } else {
+                console.error('Unexpected response:', data);
+                showError('Unexpected response from server');
+            }
+        })
+        .catch(error => {
+            console.error('Restore error:', error);
+            showError('An error occurred during restore. Please try again.');
+        });
+    }
+
+    function pollProgress(restoreId) {
+        console.log('Starting progress polling for restore ID:', restoreId);
+        
+        progressInterval = setInterval(() => {
+            fetch(`/api/restore/progress/${restoreId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Progress data received:', data);
+                    console.log('Percent:', data.percent, 'Step:', data.step, 'Message:', data.message);
+                    
+                    if (data.error) {
+                        console.error('Progress error:', data.error);
+                        clearInterval(progressInterval);
+                        showError(data.error);
+                        return;
+                    }
+                    
+                    // Update progress bar
+                    updateProgress(data.percent, data.step, data.message);
+                    
+                    // Check if completed
+                    if (data.status === 'completed') {
+                        console.log('Restore completed successfully');
+                        clearInterval(progressInterval);
+                        // Success - redirect to files page after a short delay
+                        setTimeout(() => {
+                            window.location.href = '/files';
+                        }, 1000);
+                    } else if (data.status === 'failed') {
+                        console.error('Restore failed:', data.error);
+                        clearInterval(progressInterval);
+                        showError(data.error || 'Restore failed. Please check the logs for details.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Progress polling error:', error);
+                    clearInterval(progressInterval);
+                    showError('Lost connection to server. Please refresh the page.');
+                });
+        }, 250); // Poll every 250ms for real-time updates
+    }
+
+    function updateProgress(percent, stepText, messageText) {
+        console.log(`Updating progress: ${percent}% - ${stepText} - ${messageText}`);
+        
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const progressPercent = document.getElementById('progress-percent');
+        const currentStep = document.getElementById('current-step');
+        
+        if (progressBar) {
+            progressBar.style.width = percent + '%';
+            console.log(`Progress bar width set to: ${percent}%`);
+        }
+        if (progressText) progressText.textContent = stepText;
+        if (progressPercent) progressPercent.textContent = percent + '%';
+        if (currentStep) currentStep.textContent = messageText;
+    }
+
+    function showError(message) {
+        clearInterval(progressInterval);
+        
+        // Show error in progress container
+        const progressContainer = document.getElementById('progress-container');
+        if (progressContainer) {
+            progressContainer.innerHTML = `
+                <h3 class="text-lg font-semibold text-red-600 mb-4">Restore Failed</h3>
+                <div class="bg-red-50 border border-red-200 rounded p-4 mb-4">
+                    <p class="text-red-700">${message}</p>
+                </div>
+                <div class="flex gap-4">
+                    <button onclick="location.reload()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        Try Again
+                    </button>
+                    <a href="/files" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                        Back to Files
+                    </a>
+                </div>
+            `;
+        }
+        
+        restoreInProgress = false;
+    }
+
+    // Show notification function
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+        
+        notification.className = `fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded shadow-lg z-50 transform translate-x-full transition-transform duration-300`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // Show notification
+        setTimeout(() => {
+            notification.classList.remove('translate-x-full');
+        }, 100);
+        
+        // Hide and remove notification
+        setTimeout(() => {
+            notification.classList.add('translate-x-full');
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 4000);
+    }
 </script>
 {% endblock %}

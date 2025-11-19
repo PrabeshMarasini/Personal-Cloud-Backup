@@ -1,5 +1,8 @@
 import os
 import json
+import threading
+import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from flask import Flask, render_template, request, jsonify, send_file, flash, redirect, url_for
@@ -13,6 +16,70 @@ from .backup_engine import BackupEngine
 from .file_monitoring import FileMonitor
 
 logger = logging.getLogger(__name__)
+
+class RestoreProgressTracker:
+    """Track progress of restore operations"""
+    
+    def __init__(self):
+        self.progress_data = {}
+        self.lock = threading.Lock()
+    
+    def create_progress(self, restore_id: str) -> str:
+        """Create a new progress tracker"""
+        with self.lock:
+            self.progress_data[restore_id] = {
+                'percent': 0,
+                'step': 'Initializing restore...',
+                'message': 'Preparing restore operation...',
+                'status': 'running',
+                'error': None,
+                'created_at': time.time()
+            }
+        return restore_id
+    
+    def update_progress(self, restore_id: str, percent: int, step: str, message: str):
+        """Update progress for a restore operation"""
+        with self.lock:
+            if restore_id in self.progress_data:
+                self.progress_data[restore_id].update({
+                    'percent': percent,
+                    'step': step,
+                    'message': message,
+                    'status': 'running'
+                })
+                logger.debug(f"Progress updated for {restore_id}: {percent}% - {step}")
+            else:
+                logger.warning(f"Attempted to update progress for unknown restore ID: {restore_id}")
+    
+    def complete_progress(self, restore_id: str, success: bool, error: str = None):
+        """Mark progress as complete"""
+        with self.lock:
+            if restore_id in self.progress_data:
+                self.progress_data[restore_id].update({
+                    'percent': 100 if success else self.progress_data[restore_id]['percent'],
+                    'status': 'completed' if success else 'failed',
+                    'error': error
+                })
+    
+    def get_progress(self, restore_id: str) -> Dict[str, Any]:
+        """Get progress data for a restore operation"""
+        with self.lock:
+            return self.progress_data.get(restore_id, {})
+    
+    def cleanup_old_progress(self, max_age_seconds: int = 3600):
+        """Clean up old progress data"""
+        current_time = time.time()
+        with self.lock:
+            to_remove = []
+            for restore_id, data in self.progress_data.items():
+                if current_time - data['created_at'] > max_age_seconds:
+                    to_remove.append(restore_id)
+            
+            for restore_id in to_remove:
+                del self.progress_data[restore_id]
+
+# Global progress tracker
+progress_tracker = RestoreProgressTracker()
 
 def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManager,
                    backup_engine: BackupEngine, file_monitor: FileMonitor,
@@ -232,7 +299,39 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
             logger.info(f"Attempting to restore backup {backup_id} to path: '{restore_path}'")
             logger.info(f"Restore path length: {len(restore_path)}")
             
-            # Perform the restore
+            # Check if this is an AJAX request (progress tracking)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                # Start restore in background thread with progress tracking
+                restore_id = str(uuid.uuid4())
+                progress_tracker.create_progress(restore_id)
+                
+                def restore_with_progress():
+                    def progress_callback(percent, step, message):
+                        logger.info(f"Progress update: {percent}% - {step} - {message}")
+                        progress_tracker.update_progress(restore_id, percent, step, message)
+                        # Add small delay to ensure progress is visible
+                        time.sleep(0.2)
+                    
+                    try:
+                        logger.info(f"Starting background restore for backup {backup_id}")
+                        success = backup_engine.restore_file(backup_id, restore_path, progress_callback)
+                        logger.info(f"Background restore completed: {success}")
+                        progress_tracker.complete_progress(restore_id, success)
+                    except Exception as e:
+                        logger.error(f"Background restore failed: {e}")
+                        progress_tracker.complete_progress(restore_id, False, str(e))
+                
+                # Start restore in background
+                thread = threading.Thread(target=restore_with_progress)
+                thread.daemon = True
+                thread.start()
+                
+                # Give the thread a moment to start
+                time.sleep(0.1)
+                
+                return jsonify({'restore_id': restore_id})
+            
+            # Perform the restore (synchronous for non-AJAX requests)
             success = backup_engine.restore_file(backup_id, restore_path)
             
             if success:
@@ -288,6 +387,21 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
                 
         except Exception as e:
             logger.error(f"Restore API error: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/restore/progress/<restore_id>')
+    def get_restore_progress(restore_id):
+        """Get progress of a restore operation"""
+        try:
+            progress_data = progress_tracker.get_progress(restore_id)
+            if not progress_data:
+                logger.warning(f"Progress data not found for restore ID: {restore_id}")
+                return jsonify({'error': 'Restore ID not found'}), 404
+            
+            logger.info(f"Returning progress data for {restore_id}: {progress_data}")
+            return jsonify(progress_data)
+        except Exception as e:
+            logger.error(f"Progress API error: {e}")
             return jsonify({'error': str(e)}), 500
     
     @app.route('/backup/manual', methods=['GET', 'POST'])
@@ -411,6 +525,20 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
     def internal_error(error):
         logger.error(f"Internal server error: {error}")
         return render_template('error.html', error="Internal server error"), 500
+    
+    # Start background cleanup task for old progress data
+    def cleanup_progress_data():
+        while True:
+            try:
+                progress_tracker.cleanup_old_progress(3600)  # Clean up data older than 1 hour
+                time.sleep(300)  # Run every 5 minutes
+            except Exception as e:
+                logger.error(f"Progress cleanup error: {e}")
+                time.sleep(60)  # Wait 1 minute on error
+    
+    cleanup_thread = threading.Thread(target=cleanup_progress_data)
+    cleanup_thread.daemon = True
+    cleanup_thread.start()
     
     return app
 

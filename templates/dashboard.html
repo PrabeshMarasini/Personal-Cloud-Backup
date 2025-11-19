@@ -1,68 +1,84 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1>Backup Dashboard</h1>
 
-<div class="row">
-    <div class="col-md-3">
-        <div class="card text-white bg-primary dashboard-card">
-            <div class="card-body">
-                <h5>Total Files</h5>
-                <h3>{{ data.storage_stats.total_files or 0 }}</h3>
-            </div>
-        </div>
+
+<!-- Statistics Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white shadow-md rounded p-4 text-center">
+        <h3 class="text-lg font-semibold text-gray-600 mb-2">Total Files</h3>
+        <p class="text-2xl font-bold text-blue-600" id="total-files">{{ data.storage_stats.total_files or 0 }}</p>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-success dashboard-card">
-            <div class="card-body">
-                <h5>Storage Used</h5>
-                <h3>{{ "%.1f"|format((data.storage_stats.total_encrypted_size or 0) / 1024 / 1024) }} MB</h3>
-            </div>
-        </div>
+    
+    <div class="bg-white shadow-md rounded p-4 text-center">
+        <h3 class="text-lg font-semibold text-gray-600 mb-2">Storage Used</h3>
+        <p class="text-2xl font-bold text-green-600" id="storage-used">{{ "%.1f"|format((data.storage_stats.total_encrypted_size or 0) / 1024 / 1024) }} MB</p>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-info dashboard-card">
-            <div class="card-body">
-                <h5>Monitoring</h5>
-                <h3>{{ "Active" if data.monitoring_stats.is_monitoring else "Stopped" }}</h3>
-            </div>
-        </div>
+    
+    <div class="bg-white shadow-md rounded p-4 text-center">
+        <h3 class="text-lg font-semibold text-gray-600 mb-2">Monitoring</h3>
+        <p class="text-2xl font-bold text-blue-600" id="monitoring-status">{{ "Active" if data.monitoring_stats.is_monitoring else "Stopped" }}</p>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-warning dashboard-card">
-            <div class="card-body">
-                <h5>Queue Size</h5>
-                <h3>{{ data.backup_status.queue_size or 0 }}</h3>
-            </div>
-        </div>
+    
+    <div class="bg-white shadow-md rounded p-4 text-center">
+        <h3 class="text-lg font-semibold text-gray-600 mb-2">Queue Size</h3>
+        <p class="text-2xl font-bold text-yellow-600" id="queue-size">{{ data.backup_status.queue_size or 0 }}</p>
     </div>
 </div>
 
-<div class="mt-4">
-    <h3>Recent Backups</h3>
-    <div class="table-responsive">
-        <table class="table table-striped">
-            <thead>
+<!-- Action Buttons -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <button id="process-queue-btn" onclick="processBackupQueue()" 
+            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded">
+        <span id="process-queue-text">Process Backup Queue</span>
+    </button>
+    
+    <button id="cleanup-btn" onclick="runCleanup()" 
+            class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded">
+        <span id="cleanup-text">Run Cleanup</span>
+    </button>
+</div>
+
+<!-- Recent Backups Table -->
+<div class="bg-white shadow-md rounded mb-6">
+    <div class="px-4 py-3 border-b">
+        <h3 class="text-lg font-semibold text-gray-800">Recent Backups</h3>
+    </div>
+    
+    {% if data.recent_backups %}
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
                 <tr>
-                    <th>File Path</th>
-                    <th>Last Backup</th>
+                    <th class="py-3 px-4 text-left font-semibold text-gray-600">File Path</th>
+                    <th class="py-3 px-4 text-left font-semibold text-gray-600">Last Backup</th>
+                    <th class="py-3 px-4 text-center font-semibold text-gray-600">Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="recent-backups-table">
                 {% for backup in data.recent_backups %}
-                <tr>
-                    <td>{{ backup.file_path }}</td>
-                    <td>{{ backup.latest_backup }}</td>
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="py-3 px-4">
+                        <div class="font-medium text-left">{{ backup.file_path.split('\\')[-1] or backup.file_path.split('/')[-1] or backup.file_path }}</div>
+                    </td>
+                    <td class="py-3 px-4 text-left">{{ backup.latest_backup | format_datetime | safe }}</td>
+                    <td class="py-3 px-4 text-center">
+                        <a href="/file/{{ backup.file_path | urlencode }}/versions" 
+                           class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-1 px-2 rounded text-sm">
+                            View Versions
+                        </a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</div>
-
-<div class="mt-4">
-    <button class="btn btn-primary" onclick="processBackupQueue()">Process Backup Queue</button>
-    <button class="btn btn-secondary" onclick="runCleanup()">Run Cleanup</button>
+    {% else %}
+    <div class="flex flex-col items-center justify-center p-8">
+        <p class="text-gray-500 font-semibold">No backups found</p>
+        <p class="text-gray-400 text-sm">Start monitoring files to see backups here</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 

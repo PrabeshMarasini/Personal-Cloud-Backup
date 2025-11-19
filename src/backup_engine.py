@@ -241,13 +241,24 @@ class BackupEngine:
         try:
             logger.info(f"Starting restore of backup ID {backup_id} to {restore_path}")
             
+            # Validate restore path
+            if not restore_path or not restore_path.strip():
+                logger.error("Restore path is empty or invalid")
+                return False
+            
+            restore_path = restore_path.strip()
+            logger.info(f"Normalized restore path: '{restore_path}' (length: {len(restore_path)})")
+            
             # Get backup record
             backup_record = self.db_manager.get_backup_by_id(backup_id)
             if not backup_record:
                 logger.error(f"Backup record not found: {backup_id}")
                 return False
             
+            logger.info(f"Found backup record for file: {backup_record['file_path']}")
+            
             # Download from Azure
+            logger.info(f"Downloading blob: {backup_record['blob_name']}")
             encrypted_data = self.azure_manager.download_blob(backup_record['blob_name'])
             
             # Decrypt data
@@ -263,16 +274,32 @@ class BackupEngine:
                 logger.error(f"Checksum mismatch during restore: {backup_id}")
                 return False
             
+            # Ensure parent directory exists
+            restore_dir = os.path.dirname(restore_path)
+            if restore_dir:
+                logger.info(f"Creating directory if needed: {restore_dir}")
+                os.makedirs(restore_dir, exist_ok=True)
+            
             # Write to restore path
-            os.makedirs(os.path.dirname(restore_path), exist_ok=True)
+            logger.info(f"Writing {len(original_data)} bytes to: {restore_path}")
             with open(restore_path, 'wb') as f:
                 f.write(original_data)
+            
+            # Verify the file was written correctly
+            if os.path.exists(restore_path):
+                written_size = os.path.getsize(restore_path)
+                logger.info(f"File written successfully: {written_size} bytes")
+            else:
+                logger.error(f"File was not created at: {restore_path}")
+                return False
             
             logger.info(f"Successfully restored backup {backup_id} to {restore_path}")
             return True
             
         except Exception as e:
             logger.error(f"Failed to restore backup {backup_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def backup_directory(self, directory_path: str) -> Dict[str, Any]:

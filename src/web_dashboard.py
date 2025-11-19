@@ -29,6 +29,36 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
     app.config['file_monitor'] = file_monitor
     app.config['device_id'] = device_id
     
+    # Custom template filter for datetime formatting
+    @app.template_filter('format_datetime')
+    def format_datetime(value):
+        """Format datetime string to readable format"""
+        if not value:
+            return 'Never'
+        
+        try:
+            # Parse the datetime string
+            if isinstance(value, str):
+                # Handle ISO format with microseconds
+                if 'T' in value:
+                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                else:
+                    dt = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            else:
+                dt = value
+            
+            # Format as date and time
+            date_str = dt.strftime('%Y-%m-%d')
+            time_str = dt.strftime('%I:%M:%S %p')  # 12-hour format with AM/PM
+            
+            return f"{date_str}<br><small class='text-gray-400'>{time_str}</small>"
+        except Exception as e:
+            logger.error(f"Error formatting datetime {value}: {e}")
+            return str(value)
+    
+    # Mark the filter as safe for HTML
+    app.jinja_env.filters['format_datetime'] = format_datetime
+    
     @app.route('/')
     def dashboard():
         """Main dashboard page"""
@@ -60,10 +90,26 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
     def api_status():
         """Get system status via API"""
         try:
+            # Get stats with proper error handling
+            try:
+                storage_stats = db_manager.get_storage_stats(device_id)
+            except Exception:
+                storage_stats = {'total_files': 0, 'total_encrypted_size': 0}
+            
+            try:
+                monitoring_stats = file_monitor.get_monitoring_stats()
+            except Exception:
+                monitoring_stats = {'is_monitoring': False}
+            
+            try:
+                backup_status = backup_engine.get_backup_status()
+            except Exception:
+                backup_status = {'queue_size': 0}
+            
             return jsonify({
-                'storage_stats': db_manager.get_storage_stats(device_id),
-                'monitoring_stats': file_monitor.get_monitoring_stats(),
-                'backup_status': backup_engine.get_backup_status(),
+                'storage_stats': storage_stats,
+                'monitoring_stats': monitoring_stats,
+                'backup_status': backup_status,
                 'timestamp': datetime.now().isoformat()
             })
         except Exception as e:
@@ -130,9 +176,9 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     
-    @app.route('/restore/<int:backup_id>')
+    @app.route('/restore/<int:backup_id>', methods=['GET', 'POST'])
     def restore_file_page(backup_id):
-        """Show restore file page"""
+        """Show restore file page or handle restore request"""
         try:
             backup_record = db_manager.get_backup_by_id(backup_id)
             
@@ -140,12 +186,66 @@ def create_web_app(db_manager: DatabaseManager, azure_manager: AzureStorageManag
                 flash(f"Backup record not found: {backup_id}", 'error')
                 return redirect(url_for('files_list'))
             
-            return render_template('restore.html', backup=backup_record)
+            if request.method == 'GET':
+                logger.info(f"Backup record file_path: '{backup_record['file_path']}'")
+                return render_template('restore.html', backup=backup_record)
+            
+            # Handle POST request for restore
+            logger.info(f"Form data received: {dict(request.form)}")
+            restore_path = request.form.get('restore_path')
+            overwrite = request.form.get('overwrite') == 'on'
+            create_backup = request.form.get('create_backup') == 'on'
+            
+            logger.info(f"Raw restore_path from form: '{restore_path}'")
+            logger.info(f"Restore path type: {type(restore_path)}")
+            logger.info(f"Restore path repr: {repr(restore_path)}")
+            
+            if not restore_path:
+                flash('Restore path is required', 'error')
+                return render_template('restore.html', backup=backup_record)
+            
+            # Validate restore path
+            restore_dir = os.path.dirname(restore_path)
+            if restore_dir and not os.path.exists(restore_dir):
+                try:
+                    os.makedirs(restore_dir, exist_ok=True)
+                except Exception as e:
+                    flash(f'Could not create directory {restore_dir}: {e}', 'error')
+                    return render_template('restore.html', backup=backup_record)
+            
+            # Check if file exists and handle overwrite
+            if os.path.exists(restore_path) and not overwrite:
+                flash('File already exists. Check "Overwrite existing file" to replace it.', 'warning')
+                return render_template('restore.html', backup=backup_record)
+            
+            # Create backup of existing file if requested
+            if create_backup and os.path.exists(restore_path):
+                backup_path = f"{restore_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                try:
+                    import shutil
+                    shutil.copy2(restore_path, backup_path)
+                    flash(f'Created backup of existing file: {backup_path}', 'info')
+                except Exception as e:
+                    flash(f'Warning: Could not create backup: {e}', 'warning')
+            
+            # Debug logging
+            logger.info(f"Attempting to restore backup {backup_id} to path: '{restore_path}'")
+            logger.info(f"Restore path length: {len(restore_path)}")
+            
+            # Perform the restore
+            success = backup_engine.restore_file(backup_id, restore_path)
+            
+            if success:
+                flash(f'File successfully restored to: {restore_path}', 'success')
+                return redirect(url_for('files_list'))
+            else:
+                flash('Restore failed. Please check the logs for details.', 'error')
+                return render_template('restore.html', backup=backup_record)
             
         except Exception as e:
             logger.error(f"Restore page error: {e}")
-            flash(f"Error loading restore page: {e}", 'error')
-            return redirect(url_for('files_list'))
+            flash(f"Error during restore: {e}", 'error')
+            return render_template('restore.html', backup=backup_record)
     
     @app.route('/api/restore/<int:backup_id>', methods=['POST'])
     def api_restore_file(backup_id):
